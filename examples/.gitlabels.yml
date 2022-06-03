@@ -35,6 +35,18 @@ labels: &labels
   - name: "s: needs review"
     color: "5319E7"
     description: "A feature that needs review"
+  - name: "p: critical"
+    color: "FBCA04"
+    description: "A critical issue"
+  - name: "p: high"
+    color: "FBCA04"
+    description: "A high priority issue"
+  - name: "p: medium"
+    color: "FBCA04"
+    description: "A medium priority issue"
+  - name: "p: low"
+    color: "FBCA04"
+    description: "A low priority issue"
 
 repositories:
   - owner: vcokltfre
