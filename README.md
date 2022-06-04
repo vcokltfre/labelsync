@@ -27,7 +27,7 @@ Running labelsync:
 To run labelsync you'll need a .env file in the current working directory with a `GITHUB_TOKEN` variable.
 
 ```sh
-labelsync [schema=.labelsync.yml]
+labelsync [schema=.gitlabels.yml]
 ```
 
 ## Examples and Usage
