@@ -3,16 +3,17 @@ package src
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/google/go-github/v45/github"
 )
 
-func syncRepository(repo Repository, client *github.Client) error {
+func syncRepository(repo Repository, client *github.Client) {
 	labels, _, err := client.Issues.ListLabels(context.Background(), repo.Owner, repo.Name, &github.ListOptions{
 		PerPage: 100,
 	})
 	if err != nil {
-		return err
+		panic(err)
 	}
 
 	required := map[string]Label{}
@@ -44,54 +45,76 @@ func syncRepository(repo Repository, client *github.Client) error {
 		}
 	}
 
-	if len(toDelete) == 0 && len(toCreate) == 0 && len(toUpdate) == 0 {
+	todo := len(toDelete) + len(toCreate) + len(toUpdate)
+
+	if todo == 0 {
 		fmt.Printf("No changes required for %s/%s\n", repo.Owner, repo.Name)
-		return nil
+		return
 	}
 
-	for _, label := range toCreate {
-		fmt.Println(fmt.Sprintf("[%s/%s] Creating label %s", repo.Owner, repo.Name, label.Name))
+	wg := sync.WaitGroup{}
+	wg.Add(todo)
 
-		_, _, err := client.Issues.CreateLabel(context.Background(), repo.Owner, repo.Name, &github.Label{
-			Name:        &label.Name,
-			Description: &label.Description,
-			Color:       &label.Color,
-		})
-		if err != nil {
-			return err
-		}
+	for _, label := range toCreate {
+		go func(lbl Label) {
+			fmt.Println(fmt.Sprintf("[%s/%s] Creating label %s", repo.Owner, repo.Name, lbl.Name))
+
+			_, _, err := client.Issues.CreateLabel(context.Background(), repo.Owner, repo.Name, &github.Label{
+				Name:        &lbl.Name,
+				Description: &lbl.Description,
+				Color:       &lbl.Color,
+			})
+			if err != nil {
+				panic(err)
+			}
+
+			wg.Done()
+		}(label)
 	}
 
 	for _, name := range toDelete {
-		fmt.Println(fmt.Sprintf("[%s/%s] Deleting label %s", repo.Owner, repo.Name, name))
+		go func(labelName string) {
+			fmt.Println(fmt.Sprintf("[%s/%s] Deleting label %s", repo.Owner, repo.Name, labelName))
 
-		_, err := client.Issues.DeleteLabel(context.Background(), repo.Owner, repo.Name, name)
+		_, err := client.Issues.DeleteLabel(context.Background(), repo.Owner, repo.Name, labelName)
 		if err != nil {
-			return err
+			panic(err)
 		}
+
+		wg.Done()
+		}(name)
 	}
 
 	for name, label := range toUpdate {
-		fmt.Println(fmt.Sprintf("[%s/%s] Updating label %s", repo.Owner, repo.Name, label.Name))
+		go func(labelName string, lbl Label) {
+			fmt.Println(fmt.Sprintf("[%s/%s] Updating label %s", repo.Owner, repo.Name, lbl.Name))
 
-		_, _, err := client.Issues.EditLabel(context.Background(), repo.Owner, repo.Name, name, &github.Label{
-			Description: &label.Description,
-			Color:       &label.Color,
+		_, _, err := client.Issues.EditLabel(context.Background(), repo.Owner, repo.Name, labelName, &github.Label{
+			Description: &lbl.Description,
+			Color:       &lbl.Color,
 		})
 		if err != nil {
-			return err
+			panic(err)
 		}
+
+		wg.Done()
+		}(name, label)
 	}
 
-	return nil
+	wg.Wait()
 }
 
-func Sync(schema *Schema, client *github.Client) error {
+func Sync(schema *Schema, client *github.Client) {
+	wg := sync.WaitGroup{}
+	wg.Add(len(schema.Repositories))
+
 	for _, repo := range schema.Repositories {
-		if err := syncRepository(repo, client); err != nil {
-			return err
-		}
+		go func(repo Repository) {
+			syncRepository(repo, client)
+
+			wg.Done()
+		}(repo)
 	}
 
-	return nil
+	wg.Wait()
 }
